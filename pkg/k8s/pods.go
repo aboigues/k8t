@@ -10,6 +10,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// PodInfo contains essential information about a pod for health checks
+type PodInfo struct {
+	Name              string
+	Namespace         string
+	Status            corev1.PodStatus
+	ContainerStatuses []corev1.ContainerStatus
+}
+
 // GetPod fetches a single pod by name in a namespace
 func (c *Client) GetPod(ctx context.Context, namespace, podName string) (*corev1.Pod, error) {
 	// Validate inputs using existing validation functions

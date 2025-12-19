@@ -1,10 +1,12 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -93,4 +95,53 @@ func (c *Client) Validate() error {
 	}
 
 	return nil
+}
+
+// ListNamespaces returns a list of all namespace names in the cluster
+func (c *Client) ListNamespaces(ctx context.Context) ([]string, error) {
+	if c.Clientset == nil {
+		return nil, fmt.Errorf("kubernetes clientset is nil")
+	}
+
+	namespaces, err := c.Clientset.CoreV1().Namespaces().List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list namespaces: %w", err)
+	}
+
+	names := make([]string, 0, len(namespaces.Items))
+	for _, ns := range namespaces.Items {
+		names = append(names, ns.Name)
+	}
+
+	return names, nil
+}
+
+// ListPodsInNamespace returns a list of all pods in the specified namespace
+func (c *Client) ListPodsInNamespace(ctx context.Context, namespace string) ([]PodInfo, error) {
+	if c.Clientset == nil {
+		return nil, fmt.Errorf("kubernetes clientset is nil")
+	}
+
+	pods, err := c.Clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list pods in namespace %s: %w", namespace, err)
+	}
+
+	podInfos := make([]PodInfo, 0, len(pods.Items))
+	for _, pod := range pods.Items {
+		podInfo := PodInfo{
+			Name:      pod.Name,
+			Namespace: pod.Namespace,
+			Status:    pod.Status,
+		}
+
+		// Extract container statuses
+		for _, cs := range pod.Status.ContainerStatuses {
+			podInfo.ContainerStatuses = append(podInfo.ContainerStatuses, cs)
+		}
+
+		podInfos = append(podInfos, podInfo)
+	}
+
+	return podInfos, nil
 }
