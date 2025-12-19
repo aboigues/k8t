@@ -242,7 +242,7 @@ github.com/spf13/viper    // Configuration
 
 **Dependency Management**: Go modules (built-in since Go 1.11)
 ```bash
-go mod init github.com/yourorg/k8t
+go mod init github.com/aboigues/k8t
 go mod tidy
 ```
 
@@ -336,7 +336,7 @@ k8t/
 
 ### Core Dependencies (go.mod):
 ```go
-module github.com/yourorg/k8t
+module github.com/aboigues/k8t
 
 go 1.21
 

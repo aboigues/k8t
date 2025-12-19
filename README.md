@@ -23,7 +23,7 @@ Identifies root causes of ImagePullBackOff errors in pods by analyzing:
 ### From Source
 
 ```bash
-git clone https://github.com/yourorg/k8t.git
+git clone https://github.com/aboigues/k8t.git
 cd k8t
 make build
 sudo cp bin/k8t /usr/local/bin/
@@ -32,7 +32,7 @@ sudo cp bin/k8t /usr/local/bin/
 ### Using Go Install
 
 ```bash
-go install github.com/yourorg/k8t/cmd/k8t@latest
+go install github.com/aboigues/k8t/cmd/k8t@latest
 ```
 
 ## Quick Start
