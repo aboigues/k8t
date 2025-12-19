@@ -46,6 +46,7 @@ ImagePullBackOff errors in Kubernetes pods.`,
 	// Add subcommands
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newAnalyzeCmd())
+	rootCmd.AddCommand(newCheckCmd())
 
 	return rootCmd
 }
@@ -200,4 +201,151 @@ func handleAnalysisError(err error, logger *output.AuditLogger) error {
 		os.Exit(2)
 		return err
 	}
+}
+
+// Flags for check command
+var (
+	allNamespaces bool
+	checkNamespace string
+)
+
+// newCheckCmd creates the check command
+func newCheckCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "check",
+		Short: "Check cluster for potential issues",
+		Long: `Check the Kubernetes cluster for potential issues across all namespaces
+or a specific namespace. This command scans for common problems like
+ImagePullBackOff, CrashLoopBackOff, and other pod errors.`,
+		RunE: runCheckAnalysis,
+	}
+
+	// Command-specific flags
+	cmd.Flags().BoolVarP(&allNamespaces, "all-namespaces", "A", false, "Check all namespaces")
+	cmd.Flags().StringVarP(&checkNamespace, "namespace", "n", "default", "Namespace to check")
+
+	return cmd
+}
+
+// runCheckAnalysis executes the cluster check
+func runCheckAnalysis(cmd *cobra.Command, args []string) error {
+	// Create Kubernetes client
+	client, err := k8s.NewClient(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// Validate cluster connectivity
+	if err := client.Validate(); err != nil {
+		return fmt.Errorf("failed to connect to Kubernetes cluster: %w", err)
+	}
+
+	// Create audit logger
+	auditLogger, err := output.NewAuditLogger(verbose)
+	if err != nil {
+		return fmt.Errorf("failed to create audit logger: %w", err)
+	}
+	defer auditLogger.Close()
+
+	ctx := context.Background()
+	var namespacesToCheck []string
+
+	// Determine which namespaces to check
+	if allNamespaces {
+		namespaces, err := client.ListNamespaces(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list namespaces: %w", err)
+		}
+		namespacesToCheck = namespaces
+	} else {
+		namespacesToCheck = []string{checkNamespace}
+	}
+
+	// Track overall results
+	totalIssues := 0
+	issuesByNamespace := make(map[string]int)
+
+	// Check each namespace
+	for _, ns := range namespacesToCheck {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Checking namespace: %s\n", ns)
+		}
+
+		pods, err := client.ListPodsInNamespace(ctx, ns)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to list pods in namespace %s: %v\n", ns, err)
+			continue
+		}
+
+		nsIssues := 0
+		for _, pod := range pods {
+			// Check pod status for common issues
+			hasIssue, issueType := checkPodIssues(pod)
+			if hasIssue {
+				if !quiet {
+					fmt.Printf("[%s] Pod: %s/%s - Status: %s\n",
+						issueType, ns, pod.Name, pod.Status.Phase)
+				}
+				nsIssues++
+				totalIssues++
+			}
+		}
+
+		if nsIssues > 0 {
+			issuesByNamespace[ns] = nsIssues
+		}
+	}
+
+	// Display summary
+	if !quiet {
+		fmt.Println("\n--- Summary ---")
+		if totalIssues == 0 {
+			fmt.Println("No issues found!")
+		} else {
+			fmt.Printf("Total issues found: %d\n", totalIssues)
+			fmt.Println("\nIssues by namespace:")
+			for ns, count := range issuesByNamespace {
+				fmt.Printf("  %s: %d issue(s)\n", ns, count)
+			}
+		}
+	}
+
+	// Exit with appropriate code
+	if totalIssues > 0 {
+		os.Exit(1)
+	}
+
+	return nil
+}
+
+// checkPodIssues checks if a pod has common issues
+func checkPodIssues(pod k8s.PodInfo) (bool, string) {
+	// Check for ImagePullBackOff or ErrImagePull
+	for _, containerStatus := range pod.ContainerStatuses {
+		if containerStatus.State.Waiting != nil {
+			reason := containerStatus.State.Waiting.Reason
+			switch reason {
+			case "ImagePullBackOff", "ErrImagePull":
+				return true, "ImagePullBackOff"
+			case "CrashLoopBackOff":
+				return true, "CrashLoopBackOff"
+			case "CreateContainerConfigError":
+				return true, "ConfigError"
+			case "InvalidImageName":
+				return true, "InvalidImage"
+			}
+		}
+
+		// Check if container is restarting frequently
+		if containerStatus.RestartCount > 5 {
+			return true, "HighRestarts"
+		}
+	}
+
+	// Check pod phase
+	if pod.Status.Phase == "Failed" || pod.Status.Phase == "Unknown" {
+		return true, "PodFailed"
+	}
+
+	return false, ""
 }
