@@ -3,7 +3,16 @@
 BINARY_NAME=k8t
 GO=go
 GOFLAGS=-v
-LDFLAGS=-ldflags "-s -w"
+
+# Version information
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
+BUILD_DATE ?= $(shell date -u '+%Y-%m-%d_%H:%M:%S')
+
+LDFLAGS=-ldflags "-s -w \
+	-X main.Version=$(VERSION) \
+	-X main.GitCommit=$(COMMIT) \
+	-X main.BuildDate=$(BUILD_DATE)"
 
 help: ## Display this help message
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-20s\033[0m %s\n", $$1, $$2}'

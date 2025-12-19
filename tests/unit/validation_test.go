@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/yourorg/k8t/pkg/k8s"
+	"github.com/aboigues/k8t/pkg/k8s"
 )
 
 func TestValidateNamespace(t *testing.T) {

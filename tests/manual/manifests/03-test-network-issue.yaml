@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-network-issue
+  namespace: default
+  labels:
+    test-scenario: network-issue
+    app: k8t-test
+spec:
+  containers:
+  - name: unreachable-registry
+    # Registry qui n'existe pas - provoquera une erreur de résolution DNS
+    image: nonexistent-registry-xyz123.example.invalid/nginx:latest
+    imagePullPolicy: Always
+  restartPolicy: Never

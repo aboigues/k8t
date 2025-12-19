@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/yourorg/k8t/pkg/types"
+	"github.com/aboigues/k8t/pkg/types"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )

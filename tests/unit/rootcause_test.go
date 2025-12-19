@@ -3,7 +3,7 @@ package unit
 import (
 	"testing"
 
-	"github.com/yourorg/k8t/pkg/types"
+	"github.com/aboigues/k8t/pkg/types"
 )
 
 func TestRootCause_String(t *testing.T) {

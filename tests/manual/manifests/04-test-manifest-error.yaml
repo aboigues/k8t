@@ -1,0 +1,17 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: test-manifest-error
+  namespace: default
+  labels:
+    test-scenario: manifest-error
+    app: k8t-test
+spec:
+  containers:
+  - name: wrong-arch
+    # Image pour une architecture différente
+    # Si votre cluster est amd64, cette image arm32v7 causera une erreur
+    # Si votre cluster est arm, utiliser une image amd64
+    image: arm32v7/alpine:3.19
+    imagePullPolicy: Always
+  restartPolicy: Never
