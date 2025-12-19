@@ -135,8 +135,11 @@ func (c *Client) ListPodsInNamespace(ctx context.Context, namespace string) ([]P
 			Status:    pod.Status,
 		}
 
-		// Extract container statuses
+		// Extract container statuses (both regular and init containers)
 		for _, cs := range pod.Status.ContainerStatuses {
+			podInfo.ContainerStatuses = append(podInfo.ContainerStatuses, cs)
+		}
+		for _, cs := range pod.Status.InitContainerStatuses {
 			podInfo.ContainerStatuses = append(podInfo.ContainerStatuses, cs)
 		}
 
