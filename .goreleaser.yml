@@ -74,7 +74,7 @@ changelog:
 
 release:
   github:
-    owner: yourorg
+    owner: aboigues
     name: k8t
   draft: false
   prerelease: auto
@@ -83,10 +83,10 @@ release:
 brews:
   - name: k8t
     repository:
-      owner: yourorg
+      owner: aboigues
       name: homebrew-tap
     directory: Formula
-    homepage: https://github.com/yourorg/k8t
+    homepage: https://github.com/aboigues/k8t
     description: Kubernetes administration toolkit for diagnosing common issues
     license: Apache-2.0
     dependencies:

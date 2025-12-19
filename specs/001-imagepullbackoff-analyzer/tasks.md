@@ -25,7 +25,7 @@
 
 **Purpose**: Project initialization and basic structure
 
-- [ ] T001 Initialize Go module with github.com/yourorg/k8t
+- [ ] T001 Initialize Go module with github.com/aboigues/k8t
 - [ ] T002 Create directory structure per plan.md (cmd/k8t, pkg/{analyzer,k8s,output,types}, tests/{unit,integration,contract})
 - [ ] T003 [P] Install core dependencies: client-go v0.29+, cobra v1.8+, yaml.v3, color, zap
 - [ ] T004 [P] Create Makefile with targets: build, test, test-unit, test-integration, lint, security, fmt

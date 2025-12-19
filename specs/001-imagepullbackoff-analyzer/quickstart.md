@@ -49,14 +49,14 @@ kubectl auth can-i list events
 ### 1. Clone Repository
 
 ```bash
-git clone https://github.com/yourorg/k8t.git
+git clone https://github.com/aboigues/k8t.git
 cd k8t
 ```
 
 ### 2. Initialize Go Module
 
 ```bash
-go mod init github.com/yourorg/k8t
+go mod init github.com/aboigues/k8t
 go mod tidy
 ```
 
@@ -270,7 +270,7 @@ package unit
 import (
 	"testing"
 	"github.com/stretchr/testify/assert"
-	"github.com/yourorg/k8t/pkg/analyzer"
+	"github.com/aboigues/k8t/pkg/analyzer"
 )
 
 func TestParseImagePullEvent(t *testing.T) {
@@ -301,8 +301,8 @@ import (
 	"context"
 	"testing"
 	"github.com/stretchr/testify/require"
-	"github.com/yourorg/k8t/pkg/analyzer"
-	"github.com/yourorg/k8t/pkg/k8s"
+	"github.com/aboigues/k8t/pkg/analyzer"
+	"github.com/aboigues/k8t/pkg/k8s"
 )
 
 func TestAnalyzePodWithImageNotFound(t *testing.T) {
