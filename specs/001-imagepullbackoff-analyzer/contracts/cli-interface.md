@@ -30,22 +30,22 @@ k8t analyze image-pull [TARGET] [flags] # Alternative
 
 **Syntax**:
 ```bash
-k8t analyze imagepullbackoff pod <POD_NAME> [flags]
+k8t analyze imagepullbackoff <POD_NAME> [flags]
 ```
 
 **Example Usage**:
 ```bash
 # Analyze single pod in default namespace
-k8t analyze imagepullbackoff pod my-app-pod
+k8t analyze imagepullbackoff my-app-pod
 
 # Analyze pod in specific namespace
-k8t analyze imagepullbackoff pod my-app-pod -n production
+k8t analyze imagepullbackoff my-app-pod -n production
 
 # JSON output for automation
-k8t analyze imagepullbackoff pod my-app-pod -o json
+k8t analyze imagepullbackoff my-app-pod -o json
 
 # YAML output
-k8t analyze imagepullbackoff pod my-app-pod -o yaml
+k8t analyze imagepullbackoff my-app-pod -o yaml
 ```
 
 **Flags**:
@@ -185,7 +185,7 @@ Analysis completed in 1.2s
 
 **Syntax**:
 ```bash
-k8t analyze imagepullbackoff pod <POD_NAME> --detailed [flags]
+k8t analyze imagepullbackoff <POD_NAME> --detailed [flags]
 ```
 
 **New Flags**:
@@ -375,7 +375,7 @@ Applicable to all commands:
 ### Permission Errors (RR-001)
 
 ```bash
-$ k8t analyze imagepullbackoff pod my-pod -n production
+$ k8t analyze imagepullbackoff my-pod -n production
 
 ERROR: Insufficient RBAC permissions
 
@@ -407,7 +407,7 @@ Exit code: 2
 ### Pod Not Found
 
 ```bash
-$ k8t analyze imagepullbackoff pod nonexistent -n production
+$ k8t analyze imagepullbackoff nonexistent -n production
 
 ERROR: Pod not found
 
@@ -424,7 +424,7 @@ Exit code: 3
 ### API Timeout (RR-002)
 
 ```bash
-$ k8t analyze imagepullbackoff pod my-pod
+$ k8t analyze imagepullbackoff my-pod
 
 ERROR: Kubernetes API timeout
 
@@ -462,7 +462,7 @@ Exit code: 4
 ### Scenario 1: Image Not Found
 
 ```bash
-$ k8t analyze imagepullbackoff pod broken-app
+$ k8t analyze imagepullbackoff broken-app
 
 ImagePullBackOff Analysis: broken-app (namespace: default)
 ================================================================================
@@ -486,7 +486,7 @@ Exit code: 0
 ### Scenario 2: Authentication Failure
 
 ```bash
-$ k8t analyze imagepullbackoff pod private-app --detailed
+$ k8t analyze imagepullbackoff private-app --detailed
 
 ImagePullBackOff Analysis: private-app (namespace: default) [DETAILED]
 ================================================================================
@@ -517,7 +517,7 @@ Exit code: 0
 ### Scenario 3: Network Issue with Diagnostics
 
 ```bash
-$ k8t analyze imagepullbackoff pod network-test -d
+$ k8t analyze imagepullbackoff network-test -d
 
 ImagePullBackOff Analysis: network-test (namespace: default) [DETAILED]
 ================================================================================
@@ -578,7 +578,7 @@ $ k8t analyze imagepullbackoff deployment web-app -n production -o json | jq '.s
 When `--verbose` flag is used, audit logs are written to stderr:
 
 ```bash
-$ k8t analyze imagepullbackoff pod my-pod --verbose
+$ k8t analyze imagepullbackoff my-pod --verbose
 
 [stderr output:]
 AUDIT: 2025-12-18T10:21:00Z GET pods/my-pod namespace=default
@@ -637,22 +637,22 @@ Not in current scope but documented for reference:
 
 1. **kubectl Plugin Integration**:
    ```bash
-   kubectl analyze imagepullbackoff pod my-pod
+   kubectl analyze imagepullbackoff my-pod
    ```
 
 2. **Watch Mode** (real-time monitoring):
    ```bash
-   k8t analyze imagepullbackoff pod my-pod --watch
+   k8t analyze imagepullbackoff my-pod --watch
    ```
 
 3. **Historical Analysis** (requires persistence):
    ```bash
-   k8t analyze imagepullbackoff pod my-pod --since 1h
+   k8t analyze imagepullbackoff my-pod --since 1h
    ```
 
 4. **Auto-Remediation** (requires write permissions):
    ```bash
-   k8t analyze imagepullbackoff pod my-pod --fix
+   k8t analyze imagepullbackoff my-pod --fix
    ```
 
 5. **Export to File**:
