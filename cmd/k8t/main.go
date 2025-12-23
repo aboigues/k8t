@@ -277,6 +277,10 @@ func runCheckAnalysis(cmd *cobra.Command, args []string) error {
 			continue
 		}
 
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Found %d pod(s) in namespace %s\n", len(pods), ns)
+		}
+
 		nsIssues := 0
 		for _, pod := range pods {
 			// Check pod status for common issues
@@ -312,7 +316,7 @@ func runCheckAnalysis(cmd *cobra.Command, args []string) error {
 
 	// Exit with appropriate code
 	if totalIssues > 0 {
-		os.Exit(1)
+		return fmt.Errorf("found %d issue(s) in cluster", totalIssues)
 	}
 
 	return nil
