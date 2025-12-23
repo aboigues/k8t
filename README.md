@@ -41,13 +41,13 @@ go install github.com/aboigues/k8t/cmd/k8t@latest
 
 ```bash
 # Basic analysis
-k8t analyze imagepullbackoff pod my-pod -n my-namespace
+k8t analyze imagepullbackoff my-pod -n my-namespace
 
 # Detailed analysis with network diagnostics
-k8t analyze imagepullbackoff pod my-pod -n my-namespace --detailed
+k8t analyze imagepullbackoff my-pod -n my-namespace --detailed
 
 # JSON output for automation
-k8t analyze imagepullbackoff pod my-pod -o json
+k8t analyze imagepullbackoff my-pod -o json
 ```
 
 ### Analyze Multiple Pods
@@ -92,7 +92,7 @@ Human-readable colored output with remediation steps.
 Machine-readable format for automation and integration:
 
 ```bash
-k8t analyze imagepullbackoff pod my-pod -o json
+k8t analyze imagepullbackoff my-pod -o json
 ```
 
 ### YAML
@@ -100,7 +100,7 @@ k8t analyze imagepullbackoff pod my-pod -o json
 YAML format for Kubernetes-native workflows:
 
 ```bash
-k8t analyze imagepullbackoff pod my-pod -o yaml
+k8t analyze imagepullbackoff my-pod -o yaml
 ```
 
 ## Root Causes Detected

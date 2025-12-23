@@ -60,7 +60,7 @@
 
 **Goal**: Single pod analysis with root cause identification and remediation steps
 
-**Independent Test**: Create pod with invalid image, run `k8t analyze imagepullbackoff pod <name>`, verify root cause identified correctly with remediation steps
+**Independent Test**: Create pod with invalid image, run `k8t analyze imagepullbackoff <name>`, verify root cause identified correctly with remediation steps
 
 ### Implementation for User Story 1
 
@@ -261,7 +261,7 @@ Task T039 [P] [US1]: Create test manifests
 2. Complete Phase 2: Foundational (T008-T017) - CRITICAL - blocks all stories
 3. Complete Phase 3: User Story 1 (T018-T042)
 4. **STOP and VALIDATE**: Test User Story 1 independently
-   - `k8t analyze imagepullbackoff pod test-pod`
+   - `k8t analyze imagepullbackoff test-pod`
    - Verify root cause identification works
    - Verify all output formats (text/JSON/YAML)
    - Verify RBAC permissions minimal

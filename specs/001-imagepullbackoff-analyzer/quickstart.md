@@ -226,7 +226,7 @@ k8t/
 
    # Build and test
    go build -o k8t ./cmd/k8t
-   ./k8t analyze imagepullbackoff pod test-pod
+   ./k8t analyze imagepullbackoff test-pod
    ```
 
 ### Quick Commands
@@ -486,7 +486,7 @@ mocks:
 export K8T_LOG_LEVEL=debug
 
 # Run with verbose flag
-./k8t analyze imagepullbackoff pod my-pod --verbose
+./k8t analyze imagepullbackoff my-pod --verbose
 ```
 
 ### Debug K8s API Calls
@@ -500,7 +500,7 @@ export KUBERNETES_SERVICE_HOST=localhost
 export KUBERNETES_SERVICE_PORT=8080
 
 # Run analyzer (API calls visible in proxy logs)
-./k8t analyze imagepullbackoff pod my-pod
+./k8t analyze imagepullbackoff my-pod
 ```
 
 ### Test with Sample Pods
@@ -513,7 +513,7 @@ kubectl run test-not-found --image=nonexistent:v999
 kubectl wait --for=condition=Ready=false pod/test-not-found --timeout=60s
 
 # Run analyzer
-./k8t analyze imagepullbackoff pod test-not-found
+./k8t analyze imagepullbackoff test-not-found
 
 # Cleanup
 kubectl delete pod test-not-found
@@ -652,7 +652,7 @@ if cpuprofile := os.Getenv("CPUPROFILE"); cpuprofile != "" {
 
 ```bash
 # Run with profiling
-CPUPROFILE=cpu.prof ./k8t analyze imagepullbackoff pod my-pod
+CPUPROFILE=cpu.prof ./k8t analyze imagepullbackoff my-pod
 
 # Analyze profile
 go tool pprof cpu.prof
