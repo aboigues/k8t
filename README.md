@@ -16,7 +16,33 @@ Identifies root causes of ImagePullBackOff errors in pods by analyzing:
 - Single pod analysis with actionable remediation steps
 - Detailed diagnostics with network testing and event timeline
 - Multi-pod analysis for workloads and namespaces
-- Multiple output formats: text (colored), JSON, YAML
+- Multiple output formats: text (colored), JSON, YAML, XML, TOML
+
+### CrashLoopBackOff Analyzer
+
+Diagnoses root causes of container crashes and restart loops by analyzing:
+- Container exit codes and termination status
+- Application logs from crashed containers
+- Kubernetes events and error patterns
+- Resource limits and OOMKilled status
+- Liveness/readiness probe configurations
+
+**Capabilities:**
+- Automatic log retrieval from previous container instances
+- Pattern matching on logs and events for common crash scenarios
+- Exit code analysis and interpretation
+- Comprehensive remediation guidance
+- Multiple output formats: text (colored), JSON, YAML, XML, TOML
+
+**Root Causes Detected:**
+- `OOM_KILLED` - Container exceeded memory limits
+- `APPLICATION_ERROR` - Application crashed due to internal errors
+- `CONFIG_ERROR` - Missing or invalid configuration
+- `MISSING_DEPENDENCY` - Required service unavailable
+- `PROBE_FAILURE` - Liveness/readiness probes failing
+- `PERMISSION_ERROR` - Filesystem/security permissions issues
+- `PORT_CONFLICT` - Port binding failures
+- `EXIT_CODE_ERROR` - Non-zero exit codes
 
 ## Installation
 
@@ -57,7 +83,7 @@ go install github.com/aboigues/k8t/cmd/k8t@latest
 
 k8t can be used as a kubectl plugin or as a standalone binary. Both provide identical functionality.
 
-### Analyze a Single Pod
+### Analyze ImagePullBackOff Issues
 
 ```bash
 # As kubectl plugin
@@ -68,6 +94,23 @@ k8t analyze imagepullbackoff my-pod -n my-namespace
 
 # JSON output for automation
 kubectl k8t analyze imagepullbackoff my-pod -o json
+
+# XML or TOML output
+kubectl k8t analyze imagepullbackoff my-pod -o xml
+kubectl k8t analyze imagepullbackoff my-pod -o toml
+```
+
+### Analyze CrashLoopBackOff Issues
+
+```bash
+# Analyze a crashing pod
+kubectl k8t analyze crashloopbackoff my-pod -n my-namespace
+
+# JSON output with full diagnostics
+kubectl k8t analyze crashloopbackoff my-pod -o json
+
+# Increase timeout for slow log retrieval
+kubectl k8t analyze crashloopbackoff my-pod --timeout 60s
 ```
 
 ### Analyze Multiple Pods
@@ -102,13 +145,23 @@ rules:
 - apiGroups: [""]
   resources: ["events"]
   verbs: ["list"]
+- apiGroups: [""]
+  resources: ["pods/log"]
+  verbs: ["get"]  # Required for CrashLoopBackOff analysis
 ```
 
 ## Output Formats
 
+k8t supports multiple output formats for different use cases:
+
 ### Text (Default)
 
-Human-readable colored output with remediation steps.
+Human-readable colored output with remediation steps:
+
+```bash
+kubectl k8t analyze imagepullbackoff my-pod
+kubectl k8t analyze crashloopbackoff my-pod
+```
 
 ### JSON
 
@@ -116,6 +169,7 @@ Machine-readable format for automation and integration:
 
 ```bash
 kubectl k8t analyze imagepullbackoff my-pod -o json
+kubectl k8t analyze crashloopbackoff my-pod -o json
 ```
 
 ### YAML
@@ -124,9 +178,30 @@ YAML format for Kubernetes-native workflows:
 
 ```bash
 kubectl k8t analyze imagepullbackoff my-pod -o yaml
+kubectl k8t analyze crashloopbackoff my-pod -o yaml
+```
+
+### XML
+
+XML format for enterprise systems integration:
+
+```bash
+kubectl k8t analyze imagepullbackoff my-pod -o xml
+kubectl k8t analyze crashloopbackoff my-pod -o xml
+```
+
+### TOML
+
+TOML format for configuration management:
+
+```bash
+kubectl k8t analyze imagepullbackoff my-pod -o toml
+kubectl k8t analyze crashloopbackoff my-pod -o toml
 ```
 
 ## Root Causes Detected
+
+### ImagePullBackOff Root Causes
 
 - `IMAGE_NOT_FOUND` - Image does not exist in registry
 - `AUTHENTICATION_FAILURE` - Invalid or missing image pull secrets
@@ -135,6 +210,19 @@ kubectl k8t analyze imagepullbackoff my-pod -o yaml
 - `PERMISSION_DENIED` - Insufficient permissions to pull image
 - `MANIFEST_ERROR` - Invalid image manifest or platform mismatch
 - `TRANSIENT_FAILURE` - Temporary errors (less than 3 failures over 5 minutes)
+- `UNKNOWN` - Unable to determine root cause
+
+### CrashLoopBackOff Root Causes
+
+- `OOM_KILLED` - Container exceeded memory limits
+- `APPLICATION_ERROR` - Application crashed due to internal errors
+- `CONFIG_ERROR` - Missing or invalid configuration
+- `MISSING_DEPENDENCY` - Required service or resource unavailable
+- `PROBE_FAILURE` - Liveness or readiness probe failing
+- `PERMISSION_ERROR` - Filesystem or security context permissions issue
+- `PORT_CONFLICT` - Port already in use or binding failed
+- `EXIT_CODE_ERROR` - Container exited with non-zero exit code
+- `TRANSIENT_FAILURE` - Temporary failures that may self-resolve
 - `UNKNOWN` - Unable to determine root cause
 
 ## Development
@@ -188,9 +276,25 @@ k8t/
 ├── cmd/k8t/              # CLI entry point
 ├── pkg/
 │   ├── analyzer/         # Core diagnostic logic
+│   │   ├── analyzer.go   # ImagePullBackOff & CrashLoopBackOff analyzers
+│   │   ├── detector.go   # Root cause detection with pattern matching
+│   │   ├── remediation.go # Remediation steps for each root cause
+│   │   └── events.go     # Event parsing and analysis
 │   ├── k8s/              # Kubernetes API interactions
-│   ├── output/           # Output formatters (text/JSON/YAML)
+│   │   ├── client.go     # Kubernetes client setup
+│   │   ├── pods.go       # Pod and container status retrieval
+│   │   └── events.go     # Event filtering and conversion
+│   ├── output/           # Output formatters
+│   │   ├── formatter.go  # Format dispatcher
+│   │   ├── text.go       # Colored text output
+│   │   ├── json.go       # JSON output
+│   │   ├── yaml.go       # YAML output
+│   │   ├── xml.go        # XML output
+│   │   └── toml.go       # TOML output
 │   └── types/            # Shared data types
+│       ├── finding.go    # Diagnostic finding structures
+│       ├── report.go     # Analysis report structure
+│       └── rootcause.go  # Root cause definitions
 └── tests/
     ├── unit/             # Unit tests
     ├── integration/      # Integration tests (kind)
@@ -216,8 +320,11 @@ When installed as a kubectl plugin, the binary is named `kubectl-k8t`. kubectl a
 # Install k8t plugin
 kubectl krew install k8t
 
-# Use the plugin
+# Use the plugin for ImagePullBackOff
 kubectl k8t analyze imagepullbackoff my-pod -n my-namespace
+
+# Use the plugin for CrashLoopBackOff
+kubectl k8t analyze crashloopbackoff my-pod -n my-namespace
 ```
 
 ### Manual Plugin Installation
