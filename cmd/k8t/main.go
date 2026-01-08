@@ -10,6 +10,7 @@ import (
 	"github.com/aboigues/k8t/pkg/analyzer"
 	"github.com/aboigues/k8t/pkg/k8s"
 	"github.com/aboigues/k8t/pkg/output"
+	"github.com/aboigues/k8t/pkg/types"
 )
 
 // Global flags
@@ -47,6 +48,7 @@ ImagePullBackOff errors in Kubernetes pods.`,
 	rootCmd.AddCommand(newVersionCmd())
 	rootCmd.AddCommand(newAnalyzeCmd())
 	rootCmd.AddCommand(newCheckCmd())
+	rootCmd.AddCommand(newAACmd())
 
 	return rootCmd
 }
@@ -61,6 +63,7 @@ func newAnalyzeCmd() *cobra.Command {
 
 	// Add subcommands
 	analyzeCmd.AddCommand(newImagePullBackOffCmd())
+	analyzeCmd.AddCommand(newAnalyzeAllCmd())
 
 	return analyzeCmd
 }
@@ -352,4 +355,311 @@ func checkPodIssues(pod k8s.PodInfo) (bool, string) {
 	}
 
 	return false, ""
+}
+
+// Flags for analyze all command
+var (
+	analyzeAllNamespaces bool
+	analyzeNamespace     string
+	analyzeOutputFormat  string
+	analyzeTimeoutStr    string
+)
+
+// newAnalyzeAllCmd creates the analyze all command
+func newAnalyzeAllCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "all",
+		Short: "Analyze all pods with issues in the cluster",
+		Long: `Scan the Kubernetes cluster for pods with ImagePullBackOff errors and
+perform detailed analysis on each one. This command combines cluster-wide
+scanning with deep root cause analysis.`,
+		RunE: runAnalyzeAllAnalysis,
+	}
+
+	// Command-specific flags
+	cmd.Flags().BoolVarP(&analyzeAllNamespaces, "all-namespaces", "A", false, "Analyze pods in all namespaces")
+	cmd.Flags().StringVarP(&analyzeNamespace, "namespace", "n", "default", "Namespace to analyze")
+	cmd.Flags().StringVarP(&analyzeOutputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	cmd.Flags().StringVar(&analyzeTimeoutStr, "timeout", "30s", "Analysis timeout duration per pod")
+
+	return cmd
+}
+
+// runAnalyzeAllAnalysis executes analysis on all pods with issues
+func runAnalyzeAllAnalysis(cmd *cobra.Command, args []string) error {
+	// Parse timeout
+	timeout, err := time.ParseDuration(analyzeTimeoutStr)
+	if err != nil {
+		return fmt.Errorf("invalid timeout duration '%s': %w", analyzeTimeoutStr, err)
+	}
+
+	// Parse output format
+	format, err := output.ParseFormat(analyzeOutputFormat)
+	if err != nil {
+		return err
+	}
+
+	// Create Kubernetes client
+	client, err := k8s.NewClient(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// Validate cluster connectivity
+	if err := client.Validate(); err != nil {
+		return fmt.Errorf("failed to connect to Kubernetes cluster: %w", err)
+	}
+
+	// Create audit logger
+	auditLogger, err := output.NewAuditLogger(verbose)
+	if err != nil {
+		return fmt.Errorf("failed to create audit logger: %w", err)
+	}
+	defer auditLogger.Close()
+
+	ctx := context.Background()
+	var namespacesToCheck []string
+
+	// Determine which namespaces to check
+	if analyzeAllNamespaces {
+		namespaces, err := client.ListNamespaces(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list namespaces: %w", err)
+		}
+		namespacesToCheck = namespaces
+	} else {
+		namespacesToCheck = []string{analyzeNamespace}
+	}
+
+	// Create analyzer
+	az := analyzer.NewAnalyzer(client, auditLogger, timeout)
+
+	// Track results
+	var allReports []*types.AnalysisReport
+	totalScanned := 0
+	totalWithIssues := 0
+
+	// Analyze each namespace
+	for _, ns := range namespacesToCheck {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Scanning namespace: %s\n", ns)
+		}
+
+		pods, err := client.ListPodsInNamespace(ctx, ns)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to list pods in namespace %s: %v\n", ns, err)
+			continue
+		}
+
+		// Find pods with ImagePullBackOff issues
+		for _, pod := range pods {
+			hasIssue, issueType := checkPodIssues(pod)
+			if hasIssue && issueType == "ImagePullBackOff" {
+				totalScanned++
+
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Analyzing pod: %s/%s\n", ns, pod.Name)
+				}
+
+				// Run analysis
+				report, err := az.AnalyzePod(ctx, ns, pod.Name)
+				if err != nil {
+					// Log error but continue with other pods
+					fmt.Fprintf(os.Stderr, "Warning: Failed to analyze pod %s/%s: %v\n", ns, pod.Name, err)
+					continue
+				}
+
+				if report != nil {
+					allReports = append(allReports, report)
+					if report.Summary.PodsWithIssues > 0 {
+						totalWithIssues++
+					}
+				}
+			}
+		}
+	}
+
+	// Display results
+	if !quiet {
+		if len(allReports) == 0 {
+			fmt.Println("No pods with ImagePullBackOff issues found.")
+			return nil
+		}
+
+		// Output each report
+		for _, report := range allReports {
+			if err := output.Format(report, format, noColor, os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to format output: %v\n", err)
+				continue
+			}
+			if format == output.FormatTypeText {
+				fmt.Println("\n" + "---" + "\n")
+			}
+		}
+
+		// Display summary
+		fmt.Printf("\n=== Analysis Summary ===\n")
+		fmt.Printf("Total pods analyzed: %d\n", totalScanned)
+		fmt.Printf("Pods with issues: %d\n", totalWithIssues)
+	}
+
+	// Return error if issues found
+	if totalWithIssues > 0 {
+		return fmt.Errorf("found %d pod(s) with ImagePullBackOff issues", totalWithIssues)
+	}
+
+	return nil
+}
+
+// Flags for aa command (alias)
+var (
+	aaAllNamespaces bool
+	aaNamespace     string
+	aaOutputFormat  string
+	aaTimeoutStr    string
+)
+
+// newAACmd creates the aa (analyze all) alias command
+func newAACmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "aa",
+		Short: "Shorthand for 'analyze all' - analyze all pods with issues",
+		Long: `Shorthand alias for 'k8t analyze all'. Scan the Kubernetes cluster for
+pods with ImagePullBackOff errors and perform detailed analysis on each one.`,
+		RunE: runAAAnalysis,
+	}
+
+	// Command-specific flags (same as analyze all)
+	cmd.Flags().BoolVarP(&aaAllNamespaces, "all-namespaces", "A", false, "Analyze pods in all namespaces")
+	cmd.Flags().StringVarP(&aaNamespace, "namespace", "n", "default", "Namespace to analyze")
+	cmd.Flags().StringVarP(&aaOutputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	cmd.Flags().StringVar(&aaTimeoutStr, "timeout", "30s", "Analysis timeout duration per pod")
+
+	return cmd
+}
+
+// runAAAnalysis executes analysis on all pods with issues (alias implementation)
+func runAAAnalysis(cmd *cobra.Command, args []string) error {
+	// Parse timeout
+	timeout, err := time.ParseDuration(aaTimeoutStr)
+	if err != nil {
+		return fmt.Errorf("invalid timeout duration '%s': %w", aaTimeoutStr, err)
+	}
+
+	// Parse output format
+	format, err := output.ParseFormat(aaOutputFormat)
+	if err != nil {
+		return err
+	}
+
+	// Create Kubernetes client
+	client, err := k8s.NewClient(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// Validate cluster connectivity
+	if err := client.Validate(); err != nil {
+		return fmt.Errorf("failed to connect to Kubernetes cluster: %w", err)
+	}
+
+	// Create audit logger
+	auditLogger, err := output.NewAuditLogger(verbose)
+	if err != nil {
+		return fmt.Errorf("failed to create audit logger: %w", err)
+	}
+	defer auditLogger.Close()
+
+	ctx := context.Background()
+	var namespacesToCheck []string
+
+	// Determine which namespaces to check
+	if aaAllNamespaces {
+		namespaces, err := client.ListNamespaces(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to list namespaces: %w", err)
+		}
+		namespacesToCheck = namespaces
+	} else {
+		namespacesToCheck = []string{aaNamespace}
+	}
+
+	// Create analyzer
+	az := analyzer.NewAnalyzer(client, auditLogger, timeout)
+
+	// Track results
+	var allReports []*types.AnalysisReport
+	totalScanned := 0
+	totalWithIssues := 0
+
+	// Analyze each namespace
+	for _, ns := range namespacesToCheck {
+		if verbose {
+			fmt.Fprintf(os.Stderr, "Scanning namespace: %s\n", ns)
+		}
+
+		pods, err := client.ListPodsInNamespace(ctx, ns)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: Failed to list pods in namespace %s: %v\n", ns, err)
+			continue
+		}
+
+		// Find pods with ImagePullBackOff issues
+		for _, pod := range pods {
+			hasIssue, issueType := checkPodIssues(pod)
+			if hasIssue && issueType == "ImagePullBackOff" {
+				totalScanned++
+
+				if verbose {
+					fmt.Fprintf(os.Stderr, "Analyzing pod: %s/%s\n", ns, pod.Name)
+				}
+
+				// Run analysis
+				report, err := az.AnalyzePod(ctx, ns, pod.Name)
+				if err != nil {
+					// Log error but continue with other pods
+					fmt.Fprintf(os.Stderr, "Warning: Failed to analyze pod %s/%s: %v\n", ns, pod.Name, err)
+					continue
+				}
+
+				if report != nil {
+					allReports = append(allReports, report)
+					if report.Summary.PodsWithIssues > 0 {
+						totalWithIssues++
+					}
+				}
+			}
+		}
+	}
+
+	// Display results
+	if !quiet {
+		if len(allReports) == 0 {
+			fmt.Println("No pods with ImagePullBackOff issues found.")
+			return nil
+		}
+
+		// Output each report
+		for _, report := range allReports {
+			if err := output.Format(report, format, noColor, os.Stdout); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: Failed to format output: %v\n", err)
+				continue
+			}
+			if format == output.FormatTypeText {
+				fmt.Println("\n" + "---" + "\n")
+			}
+		}
+
+		// Display summary
+		fmt.Printf("\n=== Analysis Summary ===\n")
+		fmt.Printf("Total pods analyzed: %d\n", totalScanned)
+		fmt.Printf("Pods with issues: %d\n", totalWithIssues)
+	}
+
+	// Return error if issues found
+	if totalWithIssues > 0 {
+		return fmt.Errorf("found %d pod(s) with ImagePullBackOff issues", totalWithIssues)
+	}
+
+	return nil
 }
