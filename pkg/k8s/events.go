@@ -91,3 +91,25 @@ func ConvertToEventSummary(events []corev1.Event, redact bool) []types.EventSumm
 
 	return summaries
 }
+
+// FilterCrashLoopEvents filters events related to container crashes and restarts
+func FilterCrashLoopEvents(events []corev1.Event) []corev1.Event {
+	var filtered []corev1.Event
+
+	for _, event := range events {
+		// Filter by reason - looking for crash and backoff related events
+		reason := event.Reason
+		if reason == "BackOff" ||
+		   reason == "CrashLoopBackOff" ||
+		   reason == "Failed" ||
+		   reason == "Unhealthy" ||
+		   reason == "FailedScheduling" ||
+		   reason == "FailedMount" ||
+		   reason == "FailedAttachVolume" ||
+		   reason == "FailedDetachVolume" {
+			filtered = append(filtered, event)
+		}
+	}
+
+	return filtered
+}

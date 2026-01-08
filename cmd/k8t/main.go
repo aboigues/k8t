@@ -33,7 +33,7 @@ func newRootCmd() *cobra.Command {
 		Use:   "k8t",
 		Short: "Kubernetes Administration Toolkit",
 		Long: `k8t is a diagnostic CLI tool for identifying root causes of
-ImagePullBackOff errors in Kubernetes pods.`,
+ImagePullBackOff and CrashLoopBackOff errors in Kubernetes pods.`,
 		SilenceUsage:  true,
 		SilenceErrors: true,
 	}
@@ -63,6 +63,7 @@ func newAnalyzeCmd() *cobra.Command {
 
 	// Add subcommands
 	analyzeCmd.AddCommand(newImagePullBackOffCmd())
+	analyzeCmd.AddCommand(newCrashLoopBackOffCmd())
 	analyzeCmd.AddCommand(newAnalyzeAllCmd())
 
 	return analyzeCmd
@@ -146,6 +147,90 @@ func runImagePullBackOffAnalysis(cmd *cobra.Command, args []string) error {
 	}
 
 	// Exit with appropriate code
+	if report.Summary.PodsWithIssues > 0 {
+		// Issues found, but analysis succeeded
+		return nil
+	}
+
+	return nil
+}
+
+// Flags for crashloopbackoff command
+var (
+	crashNamespace    string
+	crashOutputFormat string
+	crashTimeoutStr   string
+)
+
+// newCrashLoopBackOffCmd creates the crashloopbackoff subcommand
+func newCrashLoopBackOffCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "crashloopbackoff <pod-name>",
+		Short: "Analyze CrashLoopBackOff errors for a pod",
+		Long: `Analyze CrashLoopBackOff errors for a specific pod and provide
+root cause analysis with remediation steps.`,
+		Args: cobra.ExactArgs(1),
+		RunE: runCrashLoopBackOffAnalysis,
+	}
+
+	// Command-specific flags
+	cmd.Flags().StringVarP(&crashNamespace, "namespace", "n", "default", "Kubernetes namespace")
+	cmd.Flags().StringVarP(&crashOutputFormat, "output", "o", "text", "Output format (text, json, yaml, xml, toml)")
+	cmd.Flags().StringVar(&crashTimeoutStr, "timeout", "30s", "Analysis timeout duration")
+
+	return cmd
+}
+
+// runCrashLoopBackOffAnalysis executes the CrashLoopBackOff analysis
+func runCrashLoopBackOffAnalysis(cmd *cobra.Command, args []string) error {
+	podName := args[0]
+
+	// Parse timeout
+	timeout, err := time.ParseDuration(crashTimeoutStr)
+	if err != nil {
+		return fmt.Errorf("invalid timeout format: %w", err)
+	}
+
+	// Parse output format
+	format, err := output.ParseFormat(crashOutputFormat)
+	if err != nil {
+		return err
+	}
+
+	// Create Kubernetes client
+	client, err := k8s.NewClient(kubeconfig)
+	if err != nil {
+		return fmt.Errorf("failed to create Kubernetes client: %w", err)
+	}
+
+	// Validate cluster connectivity
+	if err := client.Validate(); err != nil {
+		return fmt.Errorf("failed to connect to Kubernetes cluster: %w", err)
+	}
+
+	// Create audit logger
+	auditLogger, err := output.NewAuditLogger(verbose)
+	if err != nil {
+		return fmt.Errorf("failed to create audit logger: %w", err)
+	}
+	defer auditLogger.Close()
+
+	// Create analyzer
+	az := analyzer.NewAnalyzer(client, auditLogger, timeout)
+
+	// Run analysis
+	report, err := az.AnalyzeCrashLoopBackOff(context.Background(), crashNamespace, podName)
+	if err != nil {
+		return handleAnalysisError(err, auditLogger)
+	}
+
+	// Format and output
+	if !quiet {
+		if err := output.Format(report, format, noColor, os.Stdout); err != nil {
+			return fmt.Errorf("failed to format output: %w", err)
+		}
+	}
+
 	if report.Summary.PodsWithIssues > 0 {
 		// Issues found, but analysis succeeded
 		return nil

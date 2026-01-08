@@ -155,3 +155,117 @@ func GetAffectedContainers(pod *corev1.Pod) []string {
 
 	return affectedContainers
 }
+
+// GetAffectedContainersForCrashLoop returns names of containers with CrashLoopBackOff
+func GetAffectedContainersForCrashLoop(pod *corev1.Pod) []string {
+	var affectedContainers []string
+
+	// Check all container statuses
+	for _, containerStatus := range pod.Status.ContainerStatuses {
+		// Check waiting state for CrashLoopBackOff
+		if containerStatus.State.Waiting != nil {
+			reason := containerStatus.State.Waiting.Reason
+			if reason == "CrashLoopBackOff" {
+				affectedContainers = append(affectedContainers, containerStatus.Name)
+			}
+		}
+		// Also check if container has recently terminated (might not be in waiting state yet)
+		if containerStatus.LastTerminationState.Terminated != nil && containerStatus.RestartCount > 0 {
+			affectedContainers = append(affectedContainers, containerStatus.Name)
+		}
+	}
+
+	// Check init container statuses
+	for _, containerStatus := range pod.Status.InitContainerStatuses {
+		if containerStatus.State.Waiting != nil {
+			reason := containerStatus.State.Waiting.Reason
+			if reason == "CrashLoopBackOff" {
+				affectedContainers = append(affectedContainers, containerStatus.Name)
+			}
+		}
+		if containerStatus.LastTerminationState.Terminated != nil && containerStatus.RestartCount > 0 {
+			affectedContainers = append(affectedContainers, containerStatus.Name)
+		}
+	}
+
+	return affectedContainers
+}
+
+// FilterPodsWithCrashLoopBackOff filters pods with CrashLoopBackOff status
+func FilterPodsWithCrashLoopBackOff(pods []corev1.Pod) []corev1.Pod {
+	var filtered []corev1.Pod
+
+	for _, pod := range pods {
+		hasCrashLoopBackOff := false
+
+		// Check all container statuses (including init containers)
+		allStatuses := append([]corev1.ContainerStatus{}, pod.Status.ContainerStatuses...)
+		allStatuses = append(allStatuses, pod.Status.InitContainerStatuses...)
+
+		for _, containerStatus := range allStatuses {
+			// Check waiting state for CrashLoopBackOff
+			if containerStatus.State.Waiting != nil {
+				reason := containerStatus.State.Waiting.Reason
+				if reason == "CrashLoopBackOff" {
+					hasCrashLoopBackOff = true
+					break
+				}
+			}
+		}
+
+		if hasCrashLoopBackOff {
+			filtered = append(filtered, pod)
+		}
+	}
+
+	return filtered
+}
+
+// GetContainerLogs retrieves logs from a specific container in a pod
+func (c *Client) GetContainerLogs(ctx context.Context, namespace, podName, containerName string, tailLines int64) (string, error) {
+	// Validate inputs
+	if err := ValidateNamespace(namespace); err != nil {
+		return "", fmt.Errorf("invalid namespace: %w", err)
+	}
+	if err := ValidatePodName(podName); err != nil {
+		return "", fmt.Errorf("invalid pod name: %w", err)
+	}
+
+	// Prepare log options
+	logOptions := &corev1.PodLogOptions{
+		Container: containerName,
+		Previous:  true, // Get logs from previous (crashed) container
+	}
+	if tailLines > 0 {
+		logOptions.TailLines = &tailLines
+	}
+
+	// Get logs
+	req := c.Clientset.CoreV1().Pods(namespace).GetLogs(podName, logOptions)
+	logStream, err := req.Stream(ctx)
+	if err != nil {
+		// If previous logs don't exist, try current logs
+		logOptions.Previous = false
+		req = c.Clientset.CoreV1().Pods(namespace).GetLogs(podName, logOptions)
+		logStream, err = req.Stream(ctx)
+		if err != nil {
+			return "", fmt.Errorf("failed to get logs for container '%s' in pod '%s': %w", containerName, podName, err)
+		}
+	}
+	defer logStream.Close()
+
+	// Read logs from stream
+	buf := make([]byte, 2048)
+	var logs string
+	for {
+		n, err := logStream.Read(buf)
+		if n > 0 {
+			logs += string(buf[:n])
+		}
+		if err != nil {
+			break
+		}
+	}
+
+	return logs, nil
+}

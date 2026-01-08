@@ -9,6 +9,7 @@ import (
 // GenerateRemediationSteps returns actionable steps for a root cause
 func GenerateRemediationSteps(rootCause types.RootCause, imageRef *types.ImageReference) []string {
 	switch rootCause {
+	// ImagePullBackOff root causes
 	case types.RootCauseImageNotFound:
 		return imageNotFoundRemediation(imageRef)
 	case types.RootCauseAuthFailure:
@@ -21,10 +22,31 @@ func GenerateRemediationSteps(rootCause types.RootCause, imageRef *types.ImageRe
 		return permissionDeniedRemediation(imageRef)
 	case types.RootCauseManifestError:
 		return manifestErrorRemediation(imageRef)
+
+	// CrashLoopBackOff root causes
+	case types.RootCauseOOMKilled:
+		return oomKilledRemediation()
+	case types.RootCauseApplicationError:
+		return applicationErrorRemediation()
+	case types.RootCauseConfigError:
+		return configErrorRemediation()
+	case types.RootCauseMissingDependency:
+		return missingDependencyRemediation()
+	case types.RootCauseProbeFailure:
+		return probeFailureRemediation()
+	case types.RootCausePermissionError:
+		return permissionErrorRemediation()
+	case types.RootCausePortConflict:
+		return portConflictRemediation()
+	case types.RootCauseExitCodeError:
+		return exitCodeErrorRemediation()
+
+	// Generic root causes
 	case types.RootCauseTransient:
 		return transientFailureRemediation()
 	case types.RootCauseUnknown:
 		return unknownRemediation(imageRef)
+
 	default:
 		return []string{"No remediation steps available for this root cause"}
 	}
@@ -174,4 +196,125 @@ func unknownRemediation(img *types.ImageReference) []string {
 	steps = append(steps, "Contact registry support if the issue persists")
 
 	return steps
+}
+
+// oomKilledRemediation returns steps for OOM_KILLED
+func oomKilledRemediation() []string {
+	return []string{
+		"Container exceeded memory limits and was killed by the OOM killer",
+		"Check current memory limits: kubectl describe pod <pod-name>",
+		"Review actual memory usage: kubectl top pod <pod-name>",
+		"Increase memory limits in pod spec: resources.limits.memory",
+		"Consider increasing memory requests: resources.requests.memory",
+		"Analyze application memory usage and look for memory leaks",
+		"Review container logs to identify what was happening before OOMKill",
+		"Consider optimizing application memory usage if limits cannot be increased",
+	}
+}
+
+// applicationErrorRemediation returns steps for APPLICATION_ERROR
+func applicationErrorRemediation() []string {
+	return []string{
+		"Application is crashing due to internal errors",
+		"Check container logs: kubectl logs <pod-name> -c <container> --previous",
+		"Look for stack traces, panic messages, or fatal errors in logs",
+		"Verify application configuration and environment variables",
+		"Check if application dependencies are available",
+		"Review application startup sequence and initialization code",
+		"Test the container image locally: docker run <image>",
+		"Enable debug logging if available to get more details",
+		"Check for application version compatibility issues",
+	}
+}
+
+// configErrorRemediation returns steps for CONFIG_ERROR
+func configErrorRemediation() []string {
+	return []string{
+		"Container is failing due to missing or invalid configuration",
+		"Check container logs for configuration error messages",
+		"Verify all required environment variables are set",
+		"Ensure ConfigMaps are created: kubectl get configmap -n <namespace>",
+		"Ensure Secrets are created: kubectl get secret -n <namespace>",
+		"Verify ConfigMap/Secret mounts in pod spec",
+		"Check file permissions on mounted config files",
+		"Validate configuration file syntax (YAML, JSON, etc.)",
+		"Ensure configuration values match expected format",
+	}
+}
+
+// missingDependencyRemediation returns steps for MISSING_DEPENDENCY
+func missingDependencyRemediation() []string {
+	return []string{
+		"Container cannot connect to required dependencies",
+		"Check if dependent services are running: kubectl get pods -A",
+		"Verify service discovery (DNS) is working",
+		"Test connectivity to dependent services from a test pod",
+		"Check network policies that might block traffic",
+		"Verify service endpoints exist: kubectl get endpoints <service>",
+		"Ensure dependent services are ready before this pod starts",
+		"Consider using init containers to wait for dependencies",
+		"Review connection strings and service names in configuration",
+	}
+}
+
+// probeFailureRemediation returns steps for PROBE_FAILURE
+func probeFailureRemediation() []string {
+	return []string{
+		"Liveness or readiness probe is failing",
+		"Check probe configuration: kubectl describe pod <pod-name>",
+		"Review container logs around the time of probe failures",
+		"Verify the probe endpoint/command is correct",
+		"Check if probe timeout is too short (increase if needed)",
+		"Verify application is responding on the probed port/path",
+		"Consider increasing initialDelaySeconds if app needs more startup time",
+		"Review periodSeconds and failureThreshold settings",
+		"Test probe endpoint manually: kubectl exec <pod> -- curl localhost:<port><path>",
+		"Ensure application isn't being restarted before it's fully initialized",
+	}
+}
+
+// permissionErrorRemediation returns steps for PERMISSION_ERROR
+func permissionErrorRemediation() []string {
+	return []string{
+		"Container has filesystem or security context permission issues",
+		"Check container logs for permission denied errors",
+		"Review securityContext settings in pod spec",
+		"Verify runAsUser and runAsGroup are correct",
+		"Check filesystem permissions on mounted volumes",
+		"Ensure service account has required RBAC permissions",
+		"Review fsGroup setting for volume access",
+		"Check if readOnlyRootFilesystem is blocking writes",
+		"Verify SELinux or AppArmor policies if enabled",
+		"Consider adjusting securityContext or volume permissions",
+	}
+}
+
+// portConflictRemediation returns steps for PORT_CONFLICT
+func portConflictRemediation() []string {
+	return []string{
+		"Port binding failed - address already in use",
+		"Check if multiple containers are trying to bind the same port",
+		"Review port configuration in container spec",
+		"Verify no duplicate port definitions in pod spec",
+		"Check if another process in the container is using the port",
+		"Review application configuration for port settings",
+		"Consider using different ports for different containers",
+		"Check if hostPort is conflicting with another pod on the same node",
+		"Verify containerPort matches application listen port",
+	}
+}
+
+// exitCodeErrorRemediation returns steps for EXIT_CODE_ERROR
+func exitCodeErrorRemediation() []string {
+	return []string{
+		"Container exited with non-zero exit code",
+		"Check container logs: kubectl logs <pod-name> -c <container> --previous",
+		"Review the exit code for meaning (common: 1=error, 126=permission, 127=not found, 137=SIGKILL, 143=SIGTERM)",
+		"Look for error messages in container output",
+		"Verify container command and arguments are correct",
+		"Test the container locally: docker run <image>",
+		"Check if the application is handling signals properly",
+		"Review entrypoint and command in Dockerfile",
+		"Ensure all required dependencies exist in the container image",
+	}
 }

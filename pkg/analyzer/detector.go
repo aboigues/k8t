@@ -63,6 +63,64 @@ var rootCausePatterns = map[types.RootCause][]string{
 	},
 }
 
+// crashLoopPatterns defines patterns for detecting CrashLoopBackOff root causes
+var crashLoopPatterns = map[types.RootCause][]string{
+	types.RootCauseConfigError: {
+		"failed to load config",
+		"configuration error",
+		"config file not found",
+		"missing required configuration",
+		"environment variable",
+		"configmap",
+		"secret",
+		"no such file or directory",
+		"cannot open",
+	},
+	types.RootCauseMissingDependency: {
+		"connection refused",
+		"dial tcp",
+		"cannot connect to",
+		"database",
+		"redis",
+		"mongodb",
+		"service not found",
+		"unknown host",
+		"failed to connect",
+	},
+	types.RootCausePortConflict: {
+		"address already in use",
+		"bind: address already in use",
+		"port is already allocated",
+		"cannot bind to",
+		"failed to bind",
+	},
+	types.RootCausePermissionError: {
+		"permission denied",
+		"access denied",
+		"operation not permitted",
+		"forbidden",
+		"cannot create directory",
+		"cannot write",
+		"read-only file system",
+	},
+	types.RootCauseProbeFailure: {
+		"liveness probe failed",
+		"readiness probe failed",
+		"startup probe failed",
+		"probe failed",
+		"unhealthy",
+	},
+	types.RootCauseApplicationError: {
+		"panic",
+		"fatal error",
+		"segmentation fault",
+		"stack trace",
+		"exception",
+		"error:",
+		"failed to start",
+	},
+}
+
 // DetectRootCause determines the root cause from event messages
 // Uses priority ordering: IMAGE_NOT_FOUND > AUTH > NETWORK > RATE_LIMIT > PERMISSION > MANIFEST > TRANSIENT > UNKNOWN
 func DetectRootCause(events []types.EventSummary, pod *corev1.Pod, analysis *EventAnalysis) types.RootCause {
@@ -105,6 +163,86 @@ func DetectRootCause(events []types.EventSummary, pod *corev1.Pod, analysis *Eve
 	}
 
 	// Default to unknown if no patterns match
+	return types.RootCauseUnknown
+}
+
+// DetectCrashLoopRootCause determines the root cause of CrashLoopBackOff from container status, events, and logs
+// Priority: OOM_KILLED > PROBE_FAILURE > CONFIG_ERROR > MISSING_DEPENDENCY > PORT_CONFLICT > PERMISSION_ERROR > APPLICATION_ERROR > EXIT_CODE_ERROR > TRANSIENT > UNKNOWN
+func DetectCrashLoopRootCause(events []types.EventSummary, pod *corev1.Pod, containerStatuses []corev1.ContainerStatus, logs string, analysis *EventAnalysis) types.RootCause {
+	// Check container termination status for OOMKilled
+	for _, status := range containerStatuses {
+		if status.LastTerminationState.Terminated != nil {
+			terminated := status.LastTerminationState.Terminated
+			if terminated.Reason == "OOMKilled" {
+				return types.RootCauseOOMKilled
+			}
+		}
+		if status.State.Terminated != nil {
+			terminated := status.State.Terminated
+			if terminated.Reason == "OOMKilled" {
+				return types.RootCauseOOMKilled
+			}
+		}
+	}
+
+	// Concatenate all event messages and logs for pattern matching
+	var messages strings.Builder
+	for _, event := range events {
+		messages.WriteString(strings.ToLower(event.Message))
+		messages.WriteString(" ")
+	}
+	if logs != "" {
+		messages.WriteString(strings.ToLower(logs))
+		messages.WriteString(" ")
+	}
+	combinedText := messages.String()
+
+	// Check patterns in priority order
+	if matchPatterns(combinedText, crashLoopPatterns[types.RootCauseProbeFailure]) {
+		return types.RootCauseProbeFailure
+	}
+
+	if matchPatterns(combinedText, crashLoopPatterns[types.RootCauseConfigError]) {
+		return types.RootCauseConfigError
+	}
+
+	if matchPatterns(combinedText, crashLoopPatterns[types.RootCauseMissingDependency]) {
+		return types.RootCauseMissingDependency
+	}
+
+	if matchPatterns(combinedText, crashLoopPatterns[types.RootCausePortConflict]) {
+		return types.RootCausePortConflict
+	}
+
+	if matchPatterns(combinedText, crashLoopPatterns[types.RootCausePermissionError]) {
+		return types.RootCausePermissionError
+	}
+
+	if matchPatterns(combinedText, crashLoopPatterns[types.RootCauseApplicationError]) {
+		return types.RootCauseApplicationError
+	}
+
+	// Check exit code from container termination
+	for _, status := range containerStatuses {
+		var exitCode int32
+		if status.LastTerminationState.Terminated != nil {
+			exitCode = status.LastTerminationState.Terminated.ExitCode
+		} else if status.State.Terminated != nil {
+			exitCode = status.State.Terminated.ExitCode
+		}
+
+		// Non-zero exit code indicates error
+		if exitCode > 0 {
+			return types.RootCauseExitCodeError
+		}
+	}
+
+	// Check for transient failure
+	if analysis != nil && analysis.IsTransient {
+		return types.RootCauseTransient
+	}
+
+	// Default to unknown
 	return types.RootCauseUnknown
 }
 
