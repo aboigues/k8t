@@ -493,7 +493,7 @@ func runAnalyzeAllAnalysis(cmd *cobra.Command, args []string) error {
 				continue
 			}
 			if format == output.FormatTypeText {
-				fmt.Println("\n" + "---" + "\n")
+				fmt.Println("\n---")
 			}
 		}
 
@@ -646,7 +646,7 @@ func runAAAnalysis(cmd *cobra.Command, args []string) error {
 				continue
 			}
 			if format == output.FormatTypeText {
-				fmt.Println("\n" + "---" + "\n")
+				fmt.Println("\n---")
 			}
 		}
 
