@@ -25,8 +25,29 @@ builds:
       - -X main.date={{.Date}}
     mod_timestamp: '{{ .CommitTimestamp }}'
 
+  - id: kubectl-k8t
+    main: ./cmd/k8t
+    binary: kubectl-k8t
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{.Version}}
+      - -X main.commit={{.Commit}}
+      - -X main.date={{.Date}}
+    mod_timestamp: '{{ .CommitTimestamp }}'
+
 archives:
   - id: k8t
+    builds:
+      - k8t
     format: tar.gz
     name_template: >-
       {{ .ProjectName }}_
@@ -39,6 +60,21 @@ archives:
         format: zip
     files:
       - README.md
+      - LICENSE
+
+  - id: kubectl-k8t
+    builds:
+      - kubectl-k8t
+    format: tar.gz
+    name_template: >-
+      kubectl-{{ .ProjectName }}_
+      {{- .Version }}_
+      {{- .Os }}_
+      {{- .Arch }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
       - LICENSE
 
 checksum:

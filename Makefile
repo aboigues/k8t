@@ -1,6 +1,7 @@
-.PHONY: build test test-unit test-integration lint security fmt clean help
+.PHONY: build build-plugin test test-unit test-integration lint security fmt clean help install-plugin
 
 BINARY_NAME=k8t
+PLUGIN_NAME=kubectl-k8t
 GO=go
 GOFLAGS=-v
 
@@ -20,8 +21,17 @@ help: ## Display this help message
 build: ## Build the k8t binary
 	$(GO) build $(GOFLAGS) $(LDFLAGS) -o bin/$(BINARY_NAME) ./cmd/k8t
 
+build-plugin: ## Build the kubectl-k8t plugin binary
+	$(GO) build $(GOFLAGS) $(LDFLAGS) -o bin/$(PLUGIN_NAME) ./cmd/k8t
+
 install: ## Install k8t to $GOPATH/bin
 	$(GO) install $(GOFLAGS) $(LDFLAGS) ./cmd/k8t
+
+install-plugin: build-plugin ## Install kubectl-k8t plugin to /usr/local/bin
+	@echo "Installing kubectl-k8t plugin to /usr/local/bin"
+	@sudo cp bin/$(PLUGIN_NAME) /usr/local/bin/$(PLUGIN_NAME)
+	@sudo chmod +x /usr/local/bin/$(PLUGIN_NAME)
+	@echo "Plugin installed successfully. Use 'kubectl k8t' to run."
 
 test: test-unit test-integration ## Run all tests
 
@@ -73,4 +83,4 @@ release: ## Build release binaries (requires goreleaser)
 
 ci: fmt vet lint security test ## Run all CI checks
 
-all: clean fmt vet lint test build ## Clean, format, lint, test, and build
+all: clean fmt vet lint test build build-plugin ## Clean, format, lint, test, and build both binaries
