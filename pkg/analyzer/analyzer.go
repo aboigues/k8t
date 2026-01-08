@@ -168,6 +168,153 @@ func (a *Analyzer) AnalyzePod(ctx context.Context, namespace, podName string) (*
 	return report, nil
 }
 
+// AnalyzeCrashLoopBackOff performs complete analysis on a pod with CrashLoopBackOff
+func (a *Analyzer) AnalyzeCrashLoopBackOff(ctx context.Context, namespace, podName string) (*types.AnalysisReport, error) {
+	// Set timeout for the entire analysis operation
+	ctx, cancel := context.WithTimeout(ctx, a.timeout)
+	defer cancel()
+
+	// Log analysis start
+	a.auditLogger.LogAnalysisStart(types.TargetTypePod, podName, namespace)
+	startTime := time.Now()
+
+	// Fetch pod
+	a.auditLogger.LogPodGet(podName, namespace)
+	pod, err := a.k8sClient.GetPod(ctx, namespace, podName)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, NewTimeoutError("GetPod", a.timeout)
+		}
+		if isNotFoundError(err) {
+			return nil, NewPodNotFoundError(namespace, podName)
+		}
+		return nil, fmt.Errorf("failed to fetch pod: %w", err)
+	}
+
+	// Check if pod has CrashLoopBackOff status
+	affectedContainers := k8s.GetAffectedContainersForCrashLoop(pod)
+	if len(affectedContainers) == 0 {
+		// No CrashLoopBackOff issue found
+		report := &types.AnalysisReport{
+			TargetType:   types.TargetTypePod,
+			TargetName:   podName,
+			Namespace:    namespace,
+			GeneratedAt:  time.Now(),
+			Findings:     []types.DiagnosticFinding{},
+			Summary: types.ReportSummary{
+				TotalPodsAnalyzed:    1,
+				PodsWithIssues:       0,
+				RootCauseBreakdown:   make(map[types.RootCause]int),
+				HighSeverityCount:    0,
+				MediumSeverityCount:  0,
+				LowSeverityCount:     0,
+			},
+		}
+		a.auditLogger.LogAnalysisComplete(types.TargetTypePod, podName, namespace, 0)
+		return report, nil
+	}
+
+	// Fetch events
+	a.auditLogger.LogEventList(namespace)
+	eventList, err := a.k8sClient.GetPodEvents(ctx, namespace, podName)
+	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, NewTimeoutError("GetPodEvents", a.timeout)
+		}
+		return nil, fmt.Errorf("failed to fetch events: %w", err)
+	}
+
+	// Filter to crash loop events
+	crashLoopEvents := k8s.FilterCrashLoopEvents(eventList.Items)
+
+	// Convert to EventSummary (with redaction)
+	eventSummaries := k8s.ConvertToEventSummary(crashLoopEvents, true)
+
+	// Parse events for analysis
+	eventAnalysis := ParseEvents(eventSummaries)
+
+	// Get container logs for the first affected container (limited to last 100 lines)
+	var containerLogs string
+	if len(affectedContainers) > 0 {
+		logs, err := a.k8sClient.GetContainerLogs(ctx, namespace, podName, affectedContainers[0], 100)
+		if err == nil {
+			containerLogs = logs
+		}
+		// Silently continue if log retrieval fails
+	}
+
+	// Detect root cause using container statuses
+	rootCause := DetectCrashLoopRootCause(eventSummaries, pod, pod.Status.ContainerStatuses, containerLogs, eventAnalysis)
+
+	// Extract image references
+	imageRefs := k8s.GetContainerImages(pod)
+
+	// Find the primary image reference
+	var primaryImageRef *types.ImageReference
+	if len(imageRefs) > 0 {
+		for _, imgRef := range imageRefs {
+			for _, affectedContainer := range affectedContainers {
+				if imgRef.ContainerName == affectedContainer {
+					primaryImageRef = &imgRef
+					break
+				}
+			}
+			if primaryImageRef != nil {
+				break
+			}
+		}
+		if primaryImageRef == nil {
+			primaryImageRef = &imageRefs[0]
+		}
+	}
+
+	// Generate remediation steps
+	remediationSteps := GenerateRemediationSteps(rootCause, primaryImageRef)
+
+	// Build diagnostic finding
+	finding := a.buildCrashLoopFinding(pod, eventSummaries, rootCause, affectedContainers, imageRefs, remediationSteps, eventAnalysis, containerLogs)
+
+	// Count severity
+	highCount, mediumCount, lowCount := 0, 0, 0
+	switch finding.Severity {
+	case types.SeverityHigh:
+		highCount = 1
+	case types.SeverityMedium:
+		mediumCount = 1
+	case types.SeverityLow:
+		lowCount = 1
+	}
+
+	// Build analysis report
+	report := &types.AnalysisReport{
+		TargetType:  types.TargetTypePod,
+		TargetName:  podName,
+		Namespace:   namespace,
+		GeneratedAt: time.Now(),
+		Findings:    []types.DiagnosticFinding{finding},
+		Summary: types.ReportSummary{
+			TotalPodsAnalyzed:    1,
+			PodsWithIssues:       1,
+			TotalContainers:      len(imageRefs),
+			ContainersWithIssues: len(affectedContainers),
+			RootCauseBreakdown: map[types.RootCause]int{
+				rootCause: 1,
+			},
+			HighSeverityCount:   highCount,
+			MediumSeverityCount: mediumCount,
+			LowSeverityCount:    lowCount,
+		},
+		AuditLog: []types.AuditEntry{},
+	}
+
+	// Log analysis complete
+	duration := time.Since(startTime)
+	a.auditLogger.LogAnalysisComplete(types.TargetTypePod, podName, namespace, len(report.Findings))
+	_ = duration
+
+	return report, nil
+}
+
 // buildFinding creates DiagnosticFinding from analysis data
 func (a *Analyzer) buildFinding(
 	pod interface{},
@@ -219,6 +366,79 @@ func (a *Analyzer) buildFinding(
 	}
 
 	return finding
+}
+
+// buildCrashLoopFinding creates DiagnosticFinding for CrashLoopBackOff analysis
+func (a *Analyzer) buildCrashLoopFinding(
+	pod interface{},
+	events []types.EventSummary,
+	rootCause types.RootCause,
+	affectedContainers []string,
+	imageRefs []types.ImageReference,
+	remediationSteps []string,
+	analysis *EventAnalysis,
+	containerLogs string,
+) types.DiagnosticFinding {
+	// Get pod metadata
+	podName, namespace := getPodMetadata(pod)
+
+	// Build summary
+	summary := fmt.Sprintf("%s: %s", rootCause, rootCause.String())
+
+	// Build details from error messages and logs
+	details := "Container is crashing repeatedly."
+	if len(analysis.ErrorMessages) > 0 {
+		details = analysis.ErrorMessages[0]
+		if len(analysis.ErrorMessages) > 1 {
+			details += fmt.Sprintf(" (and %d more events)", len(analysis.ErrorMessages)-1)
+		}
+	}
+
+	// Add log excerpt if available
+	if containerLogs != "" {
+		logLines := len(containerLogs)
+		if logLines > 500 {
+			details += fmt.Sprintf(" | Recent logs: %s...", containerLogs[:500])
+		} else if logLines > 0 {
+			details += fmt.Sprintf(" | Recent logs: %s", containerLogs)
+		}
+	}
+
+	// Calculate failure duration
+	var failureDuration string
+	if !analysis.FirstFailureTime.IsZero() && !analysis.LastFailureTime.IsZero() {
+		duration := analysis.LastFailureTime.Sub(analysis.FirstFailureTime)
+		failureDuration = formatDuration(duration)
+	}
+
+	finding := types.DiagnosticFinding{
+		RootCause:          rootCause,
+		Severity:           rootCause.Severity(),
+		PodName:            podName,
+		PodNamespace:       namespace,
+		AffectedContainers: affectedContainers,
+		Summary:            summary,
+		Details:            details,
+		RemediationSteps:   remediationSteps,
+		ImageReferences:    imageRefs,
+		Events:             events,
+		IsTransient:        analysis.IsTransient,
+		FailureCount:       analysis.FailureCount,
+		FirstFailureTime:   &analysis.FirstFailureTime,
+		LastFailureTime:    &analysis.LastFailureTime,
+		FailureDuration:    failureDuration,
+	}
+
+	return finding
+}
+
+// convertToInterfaceSlice converts a typed slice to interface slice
+func convertToInterfaceSlice[T any](slice []T) []interface{} {
+	result := make([]interface{}, len(slice))
+	for i, v := range slice {
+		result[i] = v
+	}
+	return result
 }
 
 // getPodMetadata extracts pod name and namespace from pod object
