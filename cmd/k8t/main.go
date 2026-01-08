@@ -88,7 +88,7 @@ root cause analysis with remediation steps.`,
 
 	// Command-specific flags
 	cmd.Flags().StringVarP(&namespace, "namespace", "n", "default", "Kubernetes namespace")
-	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text, json, yaml, xml, toml)")
 	cmd.Flags().StringVar(&timeoutStr, "timeout", "30s", "Analysis timeout duration")
 
 	return cmd
@@ -379,7 +379,7 @@ scanning with deep root cause analysis.`,
 	// Command-specific flags
 	cmd.Flags().BoolVarP(&analyzeAllNamespaces, "all-namespaces", "A", false, "Analyze pods in all namespaces")
 	cmd.Flags().StringVarP(&analyzeNamespace, "namespace", "n", "default", "Namespace to analyze")
-	cmd.Flags().StringVarP(&analyzeOutputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	cmd.Flags().StringVarP(&analyzeOutputFormat, "output", "o", "text", "Output format (text, json, yaml, xml, toml)")
 	cmd.Flags().StringVar(&analyzeTimeoutStr, "timeout", "30s", "Analysis timeout duration per pod")
 
 	return cmd
@@ -532,7 +532,7 @@ pods with ImagePullBackOff errors and perform detailed analysis on each one.`,
 	// Command-specific flags (same as analyze all)
 	cmd.Flags().BoolVarP(&aaAllNamespaces, "all-namespaces", "A", false, "Analyze pods in all namespaces")
 	cmd.Flags().StringVarP(&aaNamespace, "namespace", "n", "default", "Namespace to analyze")
-	cmd.Flags().StringVarP(&aaOutputFormat, "output", "o", "text", "Output format (text, json, yaml)")
+	cmd.Flags().StringVarP(&aaOutputFormat, "output", "o", "text", "Output format (text, json, yaml, xml, toml)")
 	cmd.Flags().StringVar(&aaTimeoutStr, "timeout", "30s", "Analysis timeout duration per pod")
 
 	return cmd

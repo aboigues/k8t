@@ -14,6 +14,8 @@ const (
 	FormatTypeText OutputFormat = "text"
 	FormatTypeJSON OutputFormat = "json"
 	FormatTypeYAML OutputFormat = "yaml"
+	FormatTypeXML  OutputFormat = "xml"
+	FormatTypeTOML OutputFormat = "toml"
 )
 
 // Format writes the analysis report in the specified format
@@ -33,6 +35,10 @@ func Format(report *types.AnalysisReport, format OutputFormat, noColor bool, w i
 		return formatJSONOutput(report, w)
 	case FormatTypeYAML:
 		return formatYAMLOutput(report, w)
+	case FormatTypeXML:
+		return formatXMLOutput(report, w)
+	case FormatTypeTOML:
+		return formatTOMLOutput(report, w)
 	default:
 		return fmt.Errorf("unsupported output format: %s", format)
 	}
@@ -47,7 +53,11 @@ func ParseFormat(s string) (OutputFormat, error) {
 		return FormatTypeJSON, nil
 	case "yaml", "yml":
 		return FormatTypeYAML, nil
+	case "xml":
+		return FormatTypeXML, nil
+	case "toml":
+		return FormatTypeTOML, nil
 	default:
-		return "", fmt.Errorf("unsupported format '%s': must be one of: text, json, yaml", s)
+		return "", fmt.Errorf("unsupported format '%s': must be one of: text, json, yaml, xml, toml", s)
 	}
 }
