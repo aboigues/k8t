@@ -1,0 +1,83 @@
+apiVersion: krew.googlecontainertools.dev/v1alpha2
+kind: Plugin
+metadata:
+  name: k8t
+spec:
+  version: "v0.1.0"
+  homepage: https://github.com/aboigues/k8t
+  shortDescription: Kubernetes Administration Toolkit for diagnosing pod issues
+  description: |
+    k8t is a diagnostic CLI tool for identifying root causes of ImagePullBackOff
+    errors in Kubernetes pods. It analyzes pod events, image pull secrets,
+    registry connectivity, and provides actionable remediation steps.
+
+    Features:
+    - Single pod analysis with detailed diagnostics
+    - Multi-pod analysis for workloads and namespaces
+    - Network testing (DNS, TCP, HTTP)
+    - Multiple output formats (text, JSON, YAML)
+    - Root cause detection for common image pull issues
+  caveats: |
+    Requires RBAC permissions to read pods and events in the target namespace.
+    See documentation for required Role/RoleBinding configuration.
+  platforms:
+  - selector:
+      matchLabels:
+        os: linux
+        arch: amd64
+    uri: https://github.com/aboigues/k8t/releases/download/{{ .TagName }}/kubectl-k8t_{{ .TagName }}_linux_amd64.tar.gz
+    sha256: "PLACEHOLDER_LINUX_AMD64_SHA256"
+    bin: kubectl-k8t
+    files:
+    - from: kubectl-k8t
+      to: .
+    - from: LICENSE
+      to: .
+  - selector:
+      matchLabels:
+        os: linux
+        arch: arm64
+    uri: https://github.com/aboigues/k8t/releases/download/{{ .TagName }}/kubectl-k8t_{{ .TagName }}_linux_arm64.tar.gz
+    sha256: "PLACEHOLDER_LINUX_ARM64_SHA256"
+    bin: kubectl-k8t
+    files:
+    - from: kubectl-k8t
+      to: .
+    - from: LICENSE
+      to: .
+  - selector:
+      matchLabels:
+        os: darwin
+        arch: amd64
+    uri: https://github.com/aboigues/k8t/releases/download/{{ .TagName }}/kubectl-k8t_{{ .TagName }}_darwin_amd64.tar.gz
+    sha256: "PLACEHOLDER_DARWIN_AMD64_SHA256"
+    bin: kubectl-k8t
+    files:
+    - from: kubectl-k8t
+      to: .
+    - from: LICENSE
+      to: .
+  - selector:
+      matchLabels:
+        os: darwin
+        arch: arm64
+    uri: https://github.com/aboigues/k8t/releases/download/{{ .TagName }}/kubectl-k8t_{{ .TagName }}_darwin_arm64.tar.gz
+    sha256: "PLACEHOLDER_DARWIN_ARM64_SHA256"
+    bin: kubectl-k8t
+    files:
+    - from: kubectl-k8t
+      to: .
+    - from: LICENSE
+      to: .
+  - selector:
+      matchLabels:
+        os: windows
+        arch: amd64
+    uri: https://github.com/aboigues/k8t/releases/download/{{ .TagName }}/kubectl-k8t_{{ .TagName }}_windows_amd64.zip
+    sha256: "PLACEHOLDER_WINDOWS_AMD64_SHA256"
+    bin: kubectl-k8t.exe
+    files:
+    - from: kubectl-k8t.exe
+      to: .
+    - from: LICENSE
+      to: .

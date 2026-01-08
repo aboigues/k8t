@@ -20,7 +20,25 @@ Identifies root causes of ImagePullBackOff errors in pods by analyzing:
 
 ## Installation
 
-### From Source
+### As a kubectl Plugin (Recommended)
+
+Install k8t as a kubectl plugin using krew:
+
+```bash
+kubectl krew install k8t
+```
+
+Or manually install the plugin:
+
+```bash
+git clone https://github.com/aboigues/k8t.git
+cd k8t
+make install-plugin
+```
+
+### Standalone Binary
+
+#### From Source
 
 ```bash
 git clone https://github.com/aboigues/k8t.git
@@ -29,7 +47,7 @@ make build
 sudo cp bin/k8t /usr/local/bin/
 ```
 
-### Using Go Install
+#### Using Go Install
 
 ```bash
 go install github.com/aboigues/k8t/cmd/k8t@latest
@@ -37,30 +55,35 @@ go install github.com/aboigues/k8t/cmd/k8t@latest
 
 ## Quick Start
 
+k8t can be used as a kubectl plugin or as a standalone binary. Both provide identical functionality.
+
 ### Analyze a Single Pod
 
 ```bash
-# Basic analysis
+# As kubectl plugin
+kubectl k8t analyze imagepullbackoff my-pod -n my-namespace
+
+# Or as standalone binary
 k8t analyze imagepullbackoff my-pod -n my-namespace
 
-# Detailed analysis with network diagnostics
-k8t analyze imagepullbackoff my-pod -n my-namespace --detailed
-
 # JSON output for automation
-k8t analyze imagepullbackoff my-pod -o json
+kubectl k8t analyze imagepullbackoff my-pod -o json
 ```
 
 ### Analyze Multiple Pods
 
 ```bash
 # Analyze all pods in a namespace
-k8t analyze imagepullbackoff namespace my-namespace
+kubectl k8t analyze imagepullbackoff namespace my-namespace
 
 # Analyze a deployment
-k8t analyze imagepullbackoff deployment my-deployment -n my-namespace
+kubectl k8t analyze imagepullbackoff deployment my-deployment -n my-namespace
 
 # Show only pods with issues
-k8t analyze imagepullbackoff namespace my-namespace --issues-only
+kubectl k8t analyze imagepullbackoff namespace my-namespace --issues-only
+
+# Shorthand: analyze all pods with issues
+kubectl k8t aa -A
 ```
 
 ## RBAC Requirements
@@ -92,7 +115,7 @@ Human-readable colored output with remediation steps.
 Machine-readable format for automation and integration:
 
 ```bash
-k8t analyze imagepullbackoff my-pod -o json
+kubectl k8t analyze imagepullbackoff my-pod -o json
 ```
 
 ### YAML
@@ -100,7 +123,7 @@ k8t analyze imagepullbackoff my-pod -o json
 YAML format for Kubernetes-native workflows:
 
 ```bash
-k8t analyze imagepullbackoff my-pod -o yaml
+kubectl k8t analyze imagepullbackoff my-pod -o yaml
 ```
 
 ## Root Causes Detected
@@ -173,6 +196,46 @@ k8t/
     ├── integration/      # Integration tests (kind)
     └── contract/         # API contract tests
 ```
+
+## kubectl Plugin Integration
+
+k8t is available as a kubectl plugin, providing seamless integration with your existing kubectl workflows.
+
+### How it Works
+
+When installed as a kubectl plugin, the binary is named `kubectl-k8t`. kubectl automatically discovers and executes plugins from your PATH when you run `kubectl k8t`.
+
+### Installation via Krew
+
+[Krew](https://krew.sigs.k8s.io/) is the recommended plugin manager for kubectl:
+
+```bash
+# Install krew (if not already installed)
+# See: https://krew.sigs.k8s.io/docs/user-guide/setup/install/
+
+# Install k8t plugin
+kubectl krew install k8t
+
+# Use the plugin
+kubectl k8t analyze imagepullbackoff my-pod -n my-namespace
+```
+
+### Manual Plugin Installation
+
+```bash
+# Build the plugin binary
+make build-plugin
+
+# Install to PATH
+make install-plugin
+
+# Verify installation
+kubectl plugin list | grep k8t
+```
+
+### Compatibility
+
+The kubectl plugin is fully compatible with the standalone binary. All commands, flags, and features work identically in both modes.
 
 ## Contributing
 
